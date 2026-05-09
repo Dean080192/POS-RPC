@@ -541,14 +541,19 @@ async function handleCheckout() {
   const taxAmt = sub * tax;
   const total = sub + taxAmt;
   const txnId = uid();
-  const rows = cart.map(i => `${i.name.padEnd(22)} x${i.qty}  ${fmt(i.ep*i.qty)}`).join('\n');
-  const itemsTable = `${rows}\n${'─'.repeat(36)}\nSubtotal  ${fmt(sub)}\nTax       ${fmt(taxAmt)}\nTOTAL     ${fmt(total)}`;
+  const itemsRows = cart.map(i => `
+    <tr style="border-bottom:1px solid #eee;">
+      <td align="left"   style="padding:7px 6px;">${i.name}</td>
+      <td align="center" style="padding:7px 6px;">${i.qty}</td>
+      <td align="right"  style="padding:7px 6px;">${fmt(i.ep)}</td>
+      <td align="right"  style="padding:7px 6px;">${fmt(i.ep * i.qty)}</td>
+    </tr>`).join('');
   try {
     emailjs.init(settings.ejsKey);
     await emailjs.send(settings.ejsService, settings.ejsTemplate, {
       to_email: toEmail, store_name: settings.storeName,
       customer_name: activeCustomer ? activeCustomer.name : 'Walk-in',
-      transaction_id: txnId, items_table: itemsTable,
+      transaction_id: txnId, items_rows: itemsRows,
       subtotal: fmt(sub), tax: fmt(taxAmt), total: fmt(total),
       date: new Date().toLocaleString(),
     });
