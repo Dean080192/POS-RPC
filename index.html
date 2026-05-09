@@ -6,6 +6,7 @@
 <title>POS System</title>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;700&family=IBM+Plex+Sans:wght@300;400;600&display=swap" rel="stylesheet" />
 <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 :root {
@@ -156,6 +157,40 @@ input::placeholder{color:#3a3a3a;}
 .po-input.active-override{border-color:var(--blue-bright);background:#0d1a2d;}
 .override-pill{display:inline-block;background:var(--blue);color:var(--blue-bright);font-size:9px;font-family:var(--mono);padding:2px 7px;margin:1px 1px;border:1px solid #2a4a7f;}
 
+/* IMPORT */
+#import-panel.active{overflow-y:auto;}
+.import-wrap{padding:24px;max-width:860px;margin:0 auto;}
+.import-title{color:var(--gold);font-family:var(--mono);font-size:18px;letter-spacing:2px;margin-bottom:8px;}
+.import-sub{font-size:12px;color:var(--muted);margin-bottom:24px;line-height:1.6;}
+.drop-zone{border:2px dashed var(--border);padding:40px 24px;text-align:center;cursor:pointer;transition:all .2s;margin-bottom:24px;background:var(--surface);}
+.drop-zone:hover,.drop-zone.dragover{border-color:var(--gold);background:#1a1600;}
+.drop-zone .dz-icon{font-size:32px;margin-bottom:10px;}
+.drop-zone .dz-label{font-size:13px;color:var(--muted);font-family:var(--mono);}
+.drop-zone .dz-label b{color:var(--gold);}
+.drop-zone input[type=file]{display:none;}
+#import-mapper{display:none;}
+.mapper-title{font-size:9px;letter-spacing:3px;color:var(--gold);font-family:var(--mono);margin-bottom:14px;}
+.mapper-info{font-size:12px;color:var(--muted);margin-bottom:16px;padding:10px 14px;background:var(--surface);border-left:2px solid var(--gold);}
+.mapper-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;margin-bottom:20px;}
+.mapper-field{background:var(--surface);border:1px solid var(--border);padding:14px;}
+.mapper-field .mf-label{font-size:9px;color:var(--gold);font-family:var(--mono);letter-spacing:2px;margin-bottom:8px;}
+.mapper-field .mf-req{color:#f87171;}
+.mapper-field select{width:100%;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:7px 10px;font-size:12px;font-family:var(--mono);outline:none;cursor:pointer;}
+.mapper-field select:focus{border-color:var(--gold-dim);}
+#import-preview{margin-bottom:20px;display:none;}
+.preview-title{font-size:9px;letter-spacing:3px;color:var(--muted);font-family:var(--mono);margin-bottom:10px;}
+.preview-table-wrap{overflow-x:auto;max-height:220px;overflow-y:auto;border:1px solid var(--border);}
+.preview-table{width:100%;border-collapse:collapse;font-size:11px;}
+.preview-table th{background:var(--surface2);padding:7px 10px;text-align:left;color:var(--gold);font-family:var(--mono);font-size:9px;letter-spacing:1px;position:sticky;top:0;}
+.preview-table td{padding:7px 10px;border-bottom:1px solid #1a1a1a;font-family:var(--mono);}
+.preview-table tr:hover td{background:#181818;}
+.preview-table .td-new{color:#4ade80;}
+.preview-table .td-update{color:#fbbf24;}
+.preview-table .td-err{color:#f87171;}
+.import-actions{display:flex;gap:10px;align-items:center;}
+.import-count{font-size:11px;font-family:var(--mono);color:var(--muted);}
+.import-count b{color:var(--text);}
+
 /* SETTINGS */
 #settings-panel.active{overflow-y:auto;}
 .settings-wrap{padding:32px;max-width:640px;}
@@ -187,6 +222,7 @@ input::placeholder{color:#3a3a3a;}
     <button class="tab-btn active"  onclick="switchTab('pos',this)">Register</button>
     <button class="tab-btn"         onclick="switchTab('products',this)">Products</button>
     <button class="tab-btn"         onclick="switchTab('customers',this)">Customers</button>
+    <button class="tab-btn"         onclick="switchTab('import',this)">Import</button>
     <button class="tab-btn"         onclick="switchTab('settings',this)">Settings</button>
   </div>
 </div>
@@ -288,6 +324,73 @@ input::placeholder{color:#3a3a3a;}
       <thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Custom Prices</th><th></th></tr></thead>
       <tbody id="cust-tbody"></tbody>
     </table>
+  </div>
+</div>
+
+<!-- ══ IMPORT ══ -->
+<div id="import-panel" class="tab-panel">
+  <div class="import-wrap">
+    <div class="import-title">Import from Supplier Spreadsheet</div>
+    <div class="import-sub">
+      Upload any .xlsx or .csv file from your supplier. You will be able to map their column names to the right fields before anything is imported.<br>
+      Existing products with the same Item Code will be <b style="color:#fbbf24">updated</b>. New codes will be <b style="color:#4ade80">added</b>.
+    </div>
+
+    <!-- Drop zone -->
+    <div class="drop-zone" id="drop-zone" onclick="document.getElementById('file-input').click()"
+      ondragover="event.preventDefault();this.classList.add('dragover')"
+      ondragleave="this.classList.remove('dragover')"
+      ondrop="handleDrop(event)">
+      <div class="dz-icon">📂</div>
+      <div class="dz-label"><b>Click to browse</b> or drag &amp; drop your spreadsheet here</div>
+      <div class="dz-label" style="margin-top:6px;font-size:11px;">Supports .xlsx, .xls, .csv</div>
+      <input type="file" id="file-input" accept=".xlsx,.xls,.csv" onchange="handleFileSelect(event)" />
+    </div>
+
+    <!-- Column mapper -->
+    <div id="import-mapper">
+      <div class="mapper-title">STEP 2 — MAP COLUMNS</div>
+      <div class="mapper-info" id="mapper-info"></div>
+      <div class="mapper-grid">
+        <div class="mapper-field">
+          <div class="mf-label">Item Code <span class="mf-req">*</span></div>
+          <select id="map-id"><option value="">— select column —</option></select>
+        </div>
+        <div class="mapper-field">
+          <div class="mf-label">Product Name <span class="mf-req">*</span></div>
+          <select id="map-name"><option value="">— select column —</option></select>
+        </div>
+        <div class="mapper-field">
+          <div class="mf-label">Price <span class="mf-req">*</span></div>
+          <select id="map-price"><option value="">— select column —</option></select>
+        </div>
+        <div class="mapper-field">
+          <div class="mf-label">Barcode</div>
+          <select id="map-barcode"><option value="">— not in this file —</option></select>
+        </div>
+        <div class="mapper-field">
+          <div class="mf-label">Category</div>
+          <select id="map-category"><option value="">— not in this file —</option></select>
+        </div>
+      </div>
+      <button class="btn-gold" onclick="buildPreview()" style="margin-bottom:20px;">Preview Import</button>
+    </div>
+
+    <!-- Preview -->
+    <div id="import-preview">
+      <div class="preview-title">STEP 3 — REVIEW &amp; CONFIRM</div>
+      <div class="preview-table-wrap">
+        <table class="preview-table">
+          <thead><tr><th>Status</th><th>Item Code</th><th>Name</th><th>Price</th><th>Barcode</th><th>Category</th></tr></thead>
+          <tbody id="preview-tbody"></tbody>
+        </table>
+      </div>
+      <div style="margin-top:14px;" class="import-actions">
+        <button class="btn-gold" onclick="confirmImport()">Confirm Import</button>
+        <button class="btn-ghost" onclick="resetImport()">Start Over</button>
+        <div class="import-count" id="import-count"></div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -722,6 +825,160 @@ function delCustomer(id) {
   if(activeCustomer&&activeCustomer.id===id) clearCustomer();
   persist(); renderCustTable();
   showToast('Customer removed');
+}
+
+
+// ── IMPORTER ──────────────────────────────────────────────────────────────
+let importRows    = [];   // raw parsed rows from spreadsheet
+let importHeaders = [];   // column headers
+
+function handleDrop(e) {
+  e.preventDefault();
+  document.getElementById('drop-zone').classList.remove('dragover');
+  const file = e.dataTransfer.files[0];
+  if (file) processFile(file);
+}
+
+function handleFileSelect(e) {
+  const file = e.target.files[0];
+  if (file) processFile(file);
+}
+
+function processFile(file) {
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const data = new Uint8Array(e.target.result);
+      const wb   = XLSX.read(data, { type: 'array' });
+      const ws   = wb.Sheets[wb.SheetNames[0]];
+      const json = XLSX.utils.sheet_to_json(ws, { defval: '' });
+      if (!json.length) { showToast('Spreadsheet appears empty', 'error'); return; }
+      importRows    = json;
+      importHeaders = Object.keys(json[0]);
+      showMapper(file.name);
+    } catch(err) {
+      showToast('Could not read file: ' + err.message, 'error');
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function showMapper(filename) {
+  document.getElementById('mapper-info').textContent =
+    `Loaded "${filename}" — ${importRows.length} rows, ${importHeaders.length} columns detected. Match each field below.`;
+
+  // populate selects
+  const selects = ['map-id','map-name','map-price','map-barcode','map-category'];
+  selects.forEach(sid => {
+    const sel = document.getElementById(sid);
+    // keep first option, rebuild the rest
+    while (sel.options.length > 1) sel.remove(1);
+    importHeaders.forEach(h => {
+      const opt = document.createElement('option');
+      opt.value = h; opt.textContent = h;
+      sel.appendChild(opt);
+    });
+  });
+
+  // auto-guess by common names
+  const guess = (sid, keywords) => {
+    const sel = document.getElementById(sid);
+    const match = importHeaders.find(h =>
+      keywords.some(k => h.toLowerCase().includes(k))
+    );
+    if (match) sel.value = match;
+  };
+  guess('map-id',       ['code','sku','id','item no','item_no','part']);
+  guess('map-name',     ['name','description','desc','product','title','item name']);
+  guess('map-price',    ['price','cost','rate','unit price','sell']);
+  guess('map-barcode',  ['barcode','ean','upc','gtin','scan']);
+  guess('map-category', ['category','cat','type','group','dept']);
+
+  document.getElementById('import-mapper').style.display = 'block';
+  document.getElementById('import-preview').style.display = 'none';
+  document.getElementById('drop-zone').style.display = 'none';
+}
+
+function buildPreview() {
+  const mapId  = document.getElementById('map-id').value;
+  const mapName= document.getElementById('map-name').value;
+  const mapPrice=document.getElementById('map-price').value;
+  const mapBarcode=document.getElementById('map-barcode').value;
+  const mapCat =document.getElementById('map-category').value;
+
+  if (!mapId || !mapName || !mapPrice) {
+    showToast('Item Code, Name, and Price columns are required', 'error'); return;
+  }
+
+  let newCount = 0, updateCount = 0, errCount = 0;
+  const rows = importRows.map(row => {
+    const id    = String(row[mapId]  || '').trim();
+    const name  = String(row[mapName]|| '').trim();
+    const rawP  = String(row[mapPrice]|| '').replace(/[^0-9.]/g,'');
+    const price = parseFloat(rawP);
+    const barcode  = mapBarcode  ? String(row[mapBarcode] ||'').trim() : '';
+    const category = mapCat      ? String(row[mapCat]     ||'').trim() : '';
+
+    if (!id || !name || isNaN(price)) { errCount++; return { status:'error', id, name, price: rawP, barcode, category }; }
+    const exists = products.find(p => p.id === id);
+    if (exists) updateCount++; else newCount++;
+    return { status: exists ? 'update' : 'new', id, name, price, barcode, category };
+  });
+
+  // render preview table
+  document.getElementById('preview-tbody').innerHTML = rows.map(r => {
+    const cls = r.status==='new'?'td-new':r.status==='update'?'td-update':'td-err';
+    const badge = r.status==='new'?'+ NEW':r.status==='update'?'↺ UPDATE':'✕ SKIP';
+    return `<tr>
+      <td class="${cls}">${badge}</td>
+      <td class="${cls}">${r.id||'—'}</td>
+      <td>${r.name||'—'}</td>
+      <td>${r.price!==undefined&&!isNaN(r.price)?'$'+Number(r.price).toFixed(2):r.price||'—'}</td>
+      <td>${r.barcode||'—'}</td>
+      <td>${r.category||'—'}</td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('import-count').innerHTML =
+    `<b>${newCount}</b> new &nbsp;·&nbsp; <b>${updateCount}</b> updates &nbsp;·&nbsp; <b>${errCount}</b> skipped (missing required fields)`;
+
+  // stash parsed rows for confirm step
+  window._importParsed = rows;
+  document.getElementById('import-preview').style.display = 'block';
+}
+
+function confirmImport() {
+  const rows = window._importParsed || [];
+  let added = 0, updated = 0;
+  rows.forEach(r => {
+    if (r.status === 'error') return;
+    const obj = { id: r.id, name: r.name, price: r.price, barcode: r.barcode, category: r.category };
+    const idx = products.findIndex(p => p.id === r.id);
+    if (idx >= 0) { products[idx] = obj; updated++; }
+    else          { products.push(obj); added++; }
+  });
+  persist();
+  renderGrid();
+  showToast(`Import complete — ${added} added, ${updated} updated`);
+  resetImport();
+  // switch to products tab so user can see the result
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.getElementById('products-panel').classList.add('active');
+  renderProdTable();
+  // highlight the right tab button
+  document.querySelectorAll('.tab-btn').forEach(b => {
+    if (b.textContent.trim() === 'Products') b.classList.add('active');
+  });
+}
+
+function resetImport() {
+  importRows = []; importHeaders = [];
+  window._importParsed = [];
+  document.getElementById('drop-zone').style.display = 'block';
+  document.getElementById('import-mapper').style.display = 'none';
+  document.getElementById('import-preview').style.display = 'none';
+  document.getElementById('file-input').value = '';
 }
 
 // ── SETTINGS ──────────────────────────────────────────────────────────────
