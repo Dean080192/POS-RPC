@@ -278,12 +278,14 @@ input::placeholder{color:#3a3a3a;}
     </div>
 
     <div id="checkout-area">
+      <input id="job-input" type="text" placeholder="Job number (optional)" style="width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:9px 12px;font-size:12px;outline:none;margin-bottom:10px;font-family:var(--mono);" />
       <input id="email-input" type="email" placeholder="Customer email (or store default)" />
       <button id="charge-btn" onclick="handleCheckout()">Charge &amp; Send Receipt</button>
       <button id="clear-btn" onclick="clearCart()">Clear Cart</button>
       <div id="last-txn">
         <div class="txn-ok">✓ Transaction Complete</div>
         <div class="txn-sub" id="txn-id-line"></div>
+        <div class="txn-sub" id="txn-job-line"></div>
         <div class="txn-sub" id="txn-email-line"></div>
         <div class="txn-amt" id="txn-amt-line"></div>
       </div>
@@ -735,6 +737,7 @@ function renderCart() {
 async function handleCheckout() {
   if (!cart.length) { showToast('Cart is empty', 'error'); return; }
   const toEmail = document.getElementById('email-input').value.trim() || settings.storeEmail;
+  const jobNum  = document.getElementById('job-input').value.trim();
   if (!toEmail) { showToast('Enter a recipient email first', 'error'); return; }
   if (!settings.ejsKey) { showToast('Configure EmailJS in Settings first!', 'error'); return; }
   const btn = document.getElementById('charge-btn');
@@ -745,7 +748,7 @@ async function handleCheckout() {
   const total = sub + taxAmt;
   const txnId = uid();
   const itemRows = cart.map(i => `<tr style="border-bottom:1px solid #eee;"><td style="padding:7px 6px;">${i.name}</td><td style="padding:7px 6px;text-align:center;">${i.qty}</td><td style="padding:7px 6px;text-align:right;">${fmt(i.ep)}</td><td style="padding:7px 6px;text-align:right;">${fmt(i.ep*i.qty)}</td></tr>`).join('');
-  const receiptHtml = `<div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;border:1px solid #ddd;"><div style="background:#1a1a1a;padding:20px 28px;"><div style="color:#e6b84a;font-size:11px;letter-spacing:3px;">RECEIPT</div><div style="color:#fff;font-size:20px;font-weight:bold;margin-top:4px;">${settings.storeName}</div></div><div style="padding:14px 28px;background:#f9f9f9;border-bottom:1px solid #eee;font-size:12px;color:#666;"><div><b>Transaction:</b> ${txnId}</div><div><b>Date:</b> ${new Date().toLocaleString()}</div><div><b>Customer:</b> ${activeCustomer ? activeCustomer.name : 'Walk-in'}</div></div><div style="padding:20px 28px;"><table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;font-size:13px;"><thead><tr style="border-bottom:2px solid #1a1a1a;"><th style="padding:6px;text-align:left;">Item</th><th style="padding:6px;text-align:center;">Qty</th><th style="padding:6px;text-align:right;">Unit</th><th style="padding:6px;text-align:right;">Total</th></tr></thead><tbody>${itemRows}</tbody></table></div><div style="padding:0 28px 20px;font-size:13px;"><table width="100%" cellpadding="5" cellspacing="0"><tr><td style="text-align:right;color:#666;">Subtotal</td><td style="text-align:right;width:80px;">${fmt(sub)}</td></tr><tr><td style="text-align:right;color:#666;">Tax</td><td style="text-align:right;">${fmt(taxAmt)}</td></tr><tr style="border-top:2px solid #1a1a1a;"><td style="text-align:right;font-weight:bold;font-size:15px;padding-top:8px;">TOTAL</td><td style="text-align:right;font-weight:bold;font-size:15px;color:#e6b84a;padding-top:8px;">${fmt(total)}</td></tr></table></div><div style="background:#1a1a1a;padding:14px 28px;text-align:center;font-size:11px;color:#666;">Thank you for your purchase</div></div>`;
+  const receiptHtml = `<div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;border:1px solid #ddd;"><div style="background:#1a1a1a;padding:20px 28px;"><div style="color:#e6b84a;font-size:11px;letter-spacing:3px;">RECEIPT</div><div style="color:#fff;font-size:20px;font-weight:bold;margin-top:4px;">${settings.storeName}</div></div><div style="padding:14px 28px;background:#f9f9f9;border-bottom:1px solid #eee;font-size:12px;color:#666;"><div><b>Transaction:</b> ${txnId}</div>${jobNum ? `<div><b>Job Number:</b> <span style="font-weight:bold;color:#1a1a1a;">${jobNum}</span></div>` : ''}<div><b>Date:</b> ${new Date().toLocaleString()}</div><div><b>Customer:</b> ${activeCustomer ? activeCustomer.name : 'Walk-in'}</div></div><div style="padding:20px 28px;"><table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;font-size:13px;"><thead><tr style="border-bottom:2px solid #1a1a1a;"><th style="padding:6px;text-align:left;">Item</th><th style="padding:6px;text-align:center;">Qty</th><th style="padding:6px;text-align:right;">Unit</th><th style="padding:6px;text-align:right;">Total</th></tr></thead><tbody>${itemRows}</tbody></table></div><div style="padding:0 28px 20px;font-size:13px;"><table width="100%" cellpadding="5" cellspacing="0"><tr><td style="text-align:right;color:#666;">Subtotal</td><td style="text-align:right;width:80px;">${fmt(sub)}</td></tr><tr><td style="text-align:right;color:#666;">Tax</td><td style="text-align:right;">${fmt(taxAmt)}</td></tr><tr style="border-top:2px solid #1a1a1a;"><td style="text-align:right;font-weight:bold;font-size:15px;padding-top:8px;">TOTAL</td><td style="text-align:right;font-weight:bold;font-size:15px;color:#e6b84a;padding-top:8px;">${fmt(total)}</td></tr></table></div><div style="background:#1a1a1a;padding:14px 28px;text-align:center;font-size:11px;color:#666;">Thank you for your purchase</div></div>`;
   try {
     emailjs.init(settings.ejsKey);
     await emailjs.send(settings.ejsService, settings.ejsTemplate, {
@@ -753,10 +756,13 @@ async function handleCheckout() {
       receipt_html: receiptHtml,
     });
     document.getElementById('txn-id-line').textContent    = txnId + ' · ' + new Date().toLocaleString();
+    document.getElementById('txn-job-line').textContent   = jobNum ? 'Job: ' + jobNum : '';
+    document.getElementById('txn-job-line').style.display = jobNum ? 'block' : 'none';
     document.getElementById('txn-email-line').textContent = 'Receipt → ' + toEmail;
     document.getElementById('txn-amt-line').textContent   = fmt(total);
     document.getElementById('last-txn').style.display = 'block';
     cart = []; renderCart();
+    document.getElementById('job-input').value  = '';
     document.getElementById('email-input').value = activeCustomer && activeCustomer.email ? activeCustomer.email : '';
     showToast('Receipt sent to ' + toEmail + ' ✓');
   } catch(e) {
