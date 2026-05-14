@@ -60,8 +60,19 @@ input::placeholder{color:#3a3a3a;}
 #scan-btn:hover{opacity:.85;}
 #cat-bar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;}
 .cat-chip{background:var(--surface);border:1px solid var(--border);color:var(--muted);padding:4px 12px;font-size:10px;letter-spacing:1px;transition:all .15s;}
-.cat-chip:hover{border-color:var(--gold);color:var(--gold);}
+.cat-chip:hover,.cat-chip.active{border-color:var(--gold);color:var(--gold);}
 #product-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(145px,1fr));gap:10px;}
+/* POS section tabs */
+#pos-section-tabs{display:flex;gap:0;margin-bottom:16px;border-bottom:2px solid var(--border);}
+.pos-sec-btn{background:none;border:none;color:var(--muted);padding:8px 18px;font-size:10px;letter-spacing:2px;text-transform:uppercase;border-bottom:2px solid transparent;margin-bottom:-2px;transition:all .15s;}
+.pos-sec-btn.active{color:var(--gold);border-bottom-color:var(--gold);}
+.pos-sec-btn:hover:not(.active){color:var(--text);}
+.fav-star{position:absolute;top:7px;right:7px;background:none;border:none;font-size:13px;opacity:0.35;transition:opacity .15s;padding:0;}
+.fav-star:hover{opacity:1;}
+.fav-star.on{opacity:1;}
+.prod-card{position:relative;}
+.fav-empty{text-align:center;color:#333;padding:40px 20px;font-size:13px;font-family:var(--mono);}
+.fav-empty span{color:var(--gold);}
 .prod-card{background:var(--surface);border:1px solid var(--border);padding:14px 12px;cursor:pointer;transition:border-color .15s,transform .1s;}
 .prod-card:hover{border-color:var(--gold);transform:translateY(-1px);}
 .prod-card:active{transform:translateY(0);}
@@ -216,6 +227,21 @@ input::placeholder{color:#3a3a3a;}
 .status-bad{color:#f87171;font-family:var(--mono);font-size:12px;}
 .save-btn{background:var(--gold);color:var(--bg);border:none;padding:10px 28px;font-size:11px;font-weight:700;letter-spacing:2px;margin-top:8px;transition:opacity .15s;}
 .save-btn:hover{opacity:.85;}
+
+/* PRINT */
+#print-frame{display:none;}
+@media print {
+  body * { visibility: hidden !important; }
+  #print-frame, #print-frame * { visibility: visible !important; }
+  #print-frame {
+    display: block !important;
+    position: fixed; inset: 0;
+    background: #fff; color: #000;
+    font-family: 'Courier New', monospace;
+    font-size: 12px; padding: 20px;
+    z-index: 99999;
+  }
+}
 </style>
 </head>
 <body>
@@ -247,6 +273,10 @@ input::placeholder{color:#3a3a3a;}
         onkeydown="handleScanKey(event)" />
       <div id="scan-dropdown"></div>
       <button id="scan-btn" onclick="addByQuery()">ADD</button>
+    </div>
+    <div id="pos-section-tabs">
+      <button class="pos-sec-btn active" onclick="switchPosSection('favourites',this)">★ Favourites</button>
+      <button class="pos-sec-btn"        onclick="switchPosSection('all',this)">All Products</button>
     </div>
     <div id="cat-bar"></div>
     <div id="product-grid"></div>
@@ -281,7 +311,10 @@ input::placeholder{color:#3a3a3a;}
       <input id="job-input" type="text" placeholder="Job number (optional)" style="width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:9px 12px;font-size:12px;outline:none;margin-bottom:10px;font-family:var(--mono);" />
       <input id="email-input" type="email" placeholder="Customer email (or store default)" />
       <button id="charge-btn" onclick="handleCheckout()">Charge &amp; Send Receipt</button>
-      <button id="clear-btn" onclick="clearCart()">Clear Cart</button>
+      <div style="display:flex;gap:8px;margin-top:8px;">
+        <button id="print-btn" onclick="printReceipt()" style="flex:1;background:none;border:1px solid var(--gold-dim);color:var(--gold);padding:9px;font-size:11px;letter-spacing:1px;font-family:var(--mono);transition:all .15s;" onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor='var(--gold-dim)'">🖨 PRINT RECEIPT</button>
+        <button id="clear-btn" onclick="clearCart()" style="flex:1;background:none;border:1px solid var(--border);color:#555;padding:9px;font-size:11px;font-family:var(--mono);transition:border-color .15s;">Clear Cart</button>
+      </div>
       <div id="last-txn">
         <div class="txn-ok">✓ Transaction Complete</div>
         <div class="txn-sub" id="txn-id-line"></div>
@@ -458,7 +491,8 @@ let products  = JSON.parse(localStorage.getItem('pos_products')  || 'null') || [
   {id:"P009",barcode:"012345678909",name:"Chocolate Bar",   price:1.99,category:"Snacks"},
   {id:"P010",barcode:"012345678910",name:"Trail Mix",       price:2.99,category:"Snacks"},
 ];
-let customers = JSON.parse(localStorage.getItem('pos_customers') || '[]');
+let customers  = JSON.parse(localStorage.getItem('pos_customers') || '[]');
+let favourites = JSON.parse(localStorage.getItem('pos_favourites') || '[]');
 let settings  = Object.assign(
   {storeName:'My Store',storeEmail:'',taxRate:0,ejsService:'',ejsTemplate:'',ejsKey:''},
   JSON.parse(localStorage.getItem('pos_settings') || '{}')
@@ -474,9 +508,10 @@ const fmt   = n => '$' + Number(n).toFixed(2);
 const uid   = () => 'TXN-' + Date.now().toString(36).toUpperCase();
 const newId = () => 'C-'   + Date.now().toString(36).toUpperCase();
 const persist = () => {
-  localStorage.setItem('pos_products',  JSON.stringify(products));
-  localStorage.setItem('pos_customers', JSON.stringify(customers));
-  localStorage.setItem('pos_settings',  JSON.stringify(settings));
+  localStorage.setItem('pos_products',   JSON.stringify(products));
+  localStorage.setItem('pos_customers',  JSON.stringify(customers));
+  localStorage.setItem('pos_settings',   JSON.stringify(settings));
+  localStorage.setItem('pos_favourites', JSON.stringify(favourites));
 };
 
 function custPrice(productId, basePrice) {
@@ -505,29 +540,76 @@ function switchTab(name, btn) {
 }
 
 // ── PRODUCT GRID ──────────────────────────────────────────────────────────
+let posSection = 'favourites';
+
+function switchPosSection(name, btn) {
+  posSection = name;
+  document.querySelectorAll('.pos-sec-btn').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  renderGrid();
+}
+
+function toggleFavourite(pid, e) {
+  e.stopPropagation();
+  const idx = favourites.indexOf(pid);
+  if (idx >= 0) favourites.splice(idx, 1);
+  else favourites.push(pid);
+  persist();
+  renderGrid();
+}
+
+function makeProductCard(p) {
+  const ep = custPrice(p.id, p.price);
+  const hasCustom = activeCustomer && ep !== p.price;
+  const isFav = favourites.includes(p.id);
+  const d = document.createElement('div');
+  d.className = 'prod-card';
+  d.innerHTML = `<button class="fav-star${isFav?' on':''}" title="${isFav?'Remove from favourites':'Add to favourites'}"
+    onclick="toggleFavourite('${p.id}',event)">${isFav?'★':'☆'}</button>
+    <div class="prod-id">${p.id}</div>
+    <div class="prod-name">${p.name}</div>
+    <div class="prod-price">${fmt(ep)}${hasCustom?` <span style="font-size:10px;text-decoration:line-through;color:var(--muted)">${fmt(p.price)}</span>`:''}</div>
+    ${hasCustom?'<div class="prod-custom-badge">★ custom price</div>':''}`;
+  d.onclick = () => addToCart(p.id);
+  return d;
+}
+
 function renderGrid() {
-  const cats = [...new Set(products.map(p => p.category).filter(Boolean))];
-  const cb = document.getElementById('cat-bar');
-  cb.innerHTML = '';
-  cats.forEach(cat => {
-    const b = document.createElement('button');
-    b.className = 'cat-chip'; b.textContent = cat;
-    b.onclick = () => { const p = products.find(x => x.category === cat); if (p) addToCart(p.id); };
-    cb.appendChild(b);
-  });
   const grid = document.getElementById('product-grid');
+  const cb   = document.getElementById('cat-bar');
   grid.innerHTML = '';
-  products.forEach(p => {
-    const ep = custPrice(p.id, p.price);
-    const hasCustom = activeCustomer && ep !== p.price;
-    const d = document.createElement('div');
-    d.className = 'prod-card';
-    d.innerHTML = `<div class="prod-id">${p.id}</div>
-      <div class="prod-name">${p.name}</div>
-      <div class="prod-price">${fmt(ep)}${hasCustom?` <span style="font-size:10px;text-decoration:line-through;color:var(--muted)">${fmt(p.price)}</span>`:''}</div>
-      ${hasCustom?'<div class="prod-custom-badge">★ custom price</div>':''}`;
-    d.onclick = () => addToCart(p.id);
-    grid.appendChild(d);
+  cb.innerHTML   = '';
+
+  if (posSection === 'favourites') {
+    const favProducts = products.filter(p => favourites.includes(p.id));
+    if (!favProducts.length) {
+      grid.innerHTML = '<div class="fav-empty">No favourites yet.<br>Click the <span>☆</span> on any product in <b>All Products</b> to pin it here.</div>';
+      return;
+    }
+    favProducts.forEach(p => grid.appendChild(makeProductCard(p)));
+  } else {
+    // category chips
+    const cats = [...new Set(products.map(p => p.category).filter(Boolean))];
+    cats.forEach(cat => {
+      const b = document.createElement('button');
+      b.className = 'cat-chip'; b.textContent = cat;
+      b.onclick = () => {
+        document.querySelectorAll('.cat-chip').forEach(x => x.classList.remove('active'));
+        b.classList.add('active');
+        filterByCategory(cat);
+      };
+      cb.appendChild(b);
+    });
+    // all products
+    products.forEach(p => grid.appendChild(makeProductCard(p)));
+  }
+}
+
+function filterByCategory(cat) {
+  document.querySelectorAll('.prod-card').forEach(card => {
+    const id = card.querySelector('.prod-id').textContent;
+    const p  = products.find(x => x.id === id);
+    card.style.display = (!p || p.category === cat) ? '' : 'none';
   });
 }
 
@@ -1112,11 +1194,62 @@ function saveSettings() {
   renderCart(); showToast('Settings saved ✓'); loadSettingsForm();
 }
 
+
+// ── PRINT RECEIPT ─────────────────────────────────────────────────────────
+function printReceipt() {
+  if (!cart.length) { showToast('Cart is empty', 'error'); return; }
+  const taxRate = settings.taxRate / 100;
+  const sub     = cart.reduce((s,i) => s + i.ep * i.qty, 0);
+  const taxAmt  = sub * taxRate;
+  const total   = sub + taxAmt;
+  const jobNum  = document.getElementById('job-input').value.trim();
+  const txnId   = 'PRINT-' + Date.now().toString(36).toUpperCase();
+  const now     = new Date().toLocaleString();
+  const divider = '\u2500'.repeat(38);
+
+  const itemLines = cart.map(i => {
+    const name  = i.name.length > 22 ? i.name.substring(0,21) + '\u2026' : i.name.padEnd(22);
+    const qty   = ('x' + i.qty).padStart(3);
+    const price = fmt(i.ep * i.qty).padStart(8);
+    return name + ' ' + qty + ' ' + price;
+  }).join('\n');
+
+  const html = [
+    '<div style="max-width:380px;margin:0 auto;font-family:\'Courier New\',monospace;font-size:12px;color:#000;">',
+    '  <div style="text-align:center;margin-bottom:16px;">',
+    '    <div style="font-size:18px;font-weight:bold;letter-spacing:2px;">' + settings.storeName + '</div>',
+    '    <div style="font-size:11px;color:#555;margin-top:4px;">' + now + '</div>',
+    '  </div>',
+    '  <div style="border-top:2px solid #000;border-bottom:1px solid #000;padding:6px 0;margin-bottom:8px;font-size:11px;">',
+    '    <div><b>Ref:</b> ' + txnId + '</div>',
+    jobNum         ? '    <div><b>Job:</b> ' + jobNum + '</div>' : '',
+    activeCustomer ? '    <div><b>Customer:</b> ' + activeCustomer.name + '</div>' : '',
+    '  </div>',
+    '  <pre style="font-family:\'Courier New\',monospace;font-size:12px;white-space:pre;margin:0 0 8px;">' +
+      'Item'.padEnd(22) + ' Qty    Total\n' + divider + '\n' + itemLines + '\n' + divider + '</pre>',
+    '  <table style="width:100%;font-size:12px;font-family:\'Courier New\',monospace;">',
+    '    <tr><td>Subtotal</td><td style="text-align:right;">' + fmt(sub) + '</td></tr>',
+    settings.taxRate > 0 ? '    <tr><td>Tax (' + settings.taxRate + '%)</td><td style="text-align:right;">' + fmt(taxAmt) + '</td></tr>' : '',
+    '    <tr style="border-top:2px solid #000;">',
+    '      <td style="font-weight:bold;font-size:15px;padding-top:6px;">TOTAL</td>',
+    '      <td style="font-weight:bold;font-size:15px;text-align:right;padding-top:6px;">' + fmt(total) + '</td>',
+    '    </tr>',
+    '  </table>',
+    '  <div style="text-align:center;margin-top:20px;font-size:11px;color:#555;border-top:1px dashed #999;padding-top:12px;">Thank you for your purchase</div>',
+    '</div>'
+  ].join('\n');
+
+  document.getElementById('print-frame').innerHTML = html;
+  window.print();
+}
+
 // ── INIT ──────────────────────────────────────────────────────────────────
 document.getElementById('header-store-name').textContent = settings.storeName;
 renderGrid();
 renderCart();
 document.getElementById('scan-input').focus();
 </script>
+
+<div id="print-frame"></div>
 </body>
 </html>
